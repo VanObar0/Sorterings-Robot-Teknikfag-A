@@ -1,8 +1,12 @@
 #include<mwc_stepper.h>
+#include <IRremote.h>
 //Pins brugt af step motoren
-#define EN_PIN 3
-#define DIR_PIN 2
-#define STEP_PIN 5
+#define EN_PIN 47
+#define DIR_PIN 49
+#define STEP_PIN 45
+#define EN_PIN2 39
+#define DIR_PIN2 37
+#define STEP_PIN2 35
 //RPM = Hastighed, Pulse skal matche step motoren, Omdreninger = gir sig selv
 #define RPM 30
 #define PULSE 200 
@@ -10,51 +14,104 @@
 #define OTHERWISE 0
 #define OMDREJNINGER 0.1
 
-// ikke nema23 er vist bare en variabel så det kan være den bliver skiftet
-MWCSTEPPER nema23(EN_PIN, DIR_PIN, STEP_PIN);
+#define IR_RECEIVE_PIN 5
+
+//Retningen for at komme tilbage til 0
+#define HOMEDIR OTHERWISE
+
+// ikke stepmotor1 er vist bare en variabel så det kan være den bliver skiftet
+MWCSTEPPER stepmotor1(EN_PIN, DIR_PIN, STEP_PIN);
+MWCSTEPPER stepmotor2(EN_PIN2, DIR_PIN2, STEP_PIN2);
 
 //Definere pins der bliver brugt til knapper: Ikke relævant udenfor test kan fjernes
-const int switchPin1 = 10; 
-const int switchPin2 = 11;
+const int homePin = 53;
+
+const long Pos1 = 200;
+
+long currentPos = 0;
+
 
 void setup() {
 //tilføjer en verdi til variablen
-nema23.init();
-
+stepmotor1.init();
+stepmotor2.init();
 //Sætter de pins til knapperne op - til test kan fjernes
-Serial.begin(9600);
-pinMode(switchPin1, INPUT_PULLUP); 
-pinMode(switchPin2, INPUT_PULLUP); 
+Serial.begin(9600); 
+pinMode(homePin, INPUT_PULLUP);
+IrReceiver.begin(IR_RECEIVE_PIN, ENABLE_LED_FEEDBACK);
+
 }
 
 void loop() {
-//læser værdien af de pins knappen er sat til(HIGH eller LOW)
-int switchState1 = digitalRead(switchPin1); 
-int switchState2 = digitalRead(switchPin2); 
-
-//switchstate ==HIGH skal skiftes ud med de rigtige kriterier
-if (switchState1 == HIGH) {
-  // ikke relævant udenfor test
-  Serial.println("Switch1 is ON");
-  
-  //sætter værdier ind i variablen og for løkken kører den x antal gange rundt
-  nema23.set(ClOCKWISE, RPM, PULSE);
-  for (size_t i = 0; i < PULSE*OMDREJNINGER; i++){
-  nema23.run();
-  }
-  }
-
-//samme som if statement før bare den anden retning
-if (switchState2 == HIGH) {
-  Serial.println("Switch2 is ON");
-  
-  nema23.set(OTHERWISE, RPM, PULSE);
-  for (size_t i = 0; i < PULSE*OMDREJNINGER; i++){
-  nema23.run();
-  }
-  }
-//delay for at undgå spass
-delay(50);
 
 
+
+
+
+
+int homeState = digitalRead(homePin);
+
+if (homeState == LOW){
+  currentPos = 0;
+  Serial.println(currentPos);
 }
+
+
+
+if (IrReceiver.decode()) {
+  //Serial.print(IrReceiver.decodedIRData.command);
+  switch (IrReceiver.decodedIRData.command) {
+      case 67:
+      Serial.println("Switch2 is ON");
+      stepmotor1.set(ClOCKWISE, RPM, PULSE);
+      stepmotor2.set(ClOCKWISE, RPM, PULSE);
+      for (size_t i = 0; i < PULSE*OMDREJNINGER; i++){
+        stepmotor1.run();
+        stepmotor2.run();
+        }
+      currentPos += (PULSE*OMDREJNINGER);
+      Serial.println(currentPos);
+      break;
+      case 68:
+      Serial.println("Switch2 is ON");
+      stepmotor1.set(OTHERWISE, RPM, PULSE);
+      stepmotor2.set(OTHERWISE, RPM, PULSE);
+      for (size_t i = 0; i < PULSE*OMDREJNINGER; i++){
+        stepmotor1.run();
+        stepmotor2.run();
+        }
+      currentPos -= (PULSE*OMDREJNINGER);
+      Serial.println(currentPos);
+      break;
+      
+      case 12:
+      // ikke relævant udenfor test
+      Serial.println("Switch1 is ON");
+       if(currentPos < Pos1){
+        stepmotor1.set(ClOCKWISE, RPM, PULSE);
+        stepmotor2.set(ClOCKWISE, RPM, PULSE);
+        for (size_t i = 0; i < Pos1-currentPos; i++){
+          stepmotor1.run();
+          stepmotor2.run();
+        }
+      }else{
+        stepmotor1.set(OTHERWISE, RPM, PULSE);
+        stepmotor2.set(OTHERWISE, RPM, PULSE);
+        for (size_t i = 0; i < currentPos-Pos1; i++){
+          stepmotor1.run();
+          stepmotor2.run();
+        }
+      }
+      //sætter værdier ind i variablen og for løkken kører den x antal gange rundt
+      currentPos = Pos1;
+      Serial.println(currentPos);
+      break;
+      
+    }
+  IrReceiver.resume(); 
+  }
+delay(50);
+}
+
+
+
